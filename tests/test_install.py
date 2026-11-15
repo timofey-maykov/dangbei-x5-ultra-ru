@@ -133,7 +133,7 @@ class FakeADB:
             self.mutate(args)
             if args[1] == 'set':
                 self.settings['secure/default_input_method'] = args[-1]
-        elif args[:2] == ('am', 'start'):
+        elif args[0] == 'am' and args[1] in ['start', 'force-stop']:
             self.mutate(args)
         else:
             raise AssertionError(args)
@@ -156,6 +156,7 @@ class InstallerTests(unittest.TestCase):
         self.adb = FakeADB(self.manifest, self.payload, self.backups)
         self.addCleanup(patch.stopall)
         patch('builtins.print').start()
+        patch('install.time.sleep', return_value=None).start()
 
     def install(self, **kwargs):
         return app.install(self.adb, self.manifest, self.payload, self.backups, **kwargs)
@@ -169,17 +170,23 @@ class InstallerTests(unittest.TestCase):
                          'existing/.Service:' + app.REMOTE)
         self.assertTrue(self.adb.package('com.android.vending')['installed'])
         self.assertEqual(len(self.adb.package('com.android.vending')['paths']), 3)
+        self.assertEqual(self.adb.package(app.STOCK_CAST)['enabled'], 3)
+        self.assertTrue(self.adb.package(app.RUSSIAN_CAST)['installed'])
         app.restore(self.adb, self.manifest, folder)
         self.assertEqual(self.adb.settings, before)
         self.assertEqual(self.adb.tables, tables)
         self.assertFalse(self.adb.package('com.dangbei.launcher3')['installed'])
         self.assertFalse(self.adb.package('com.android.vending')['installed'])
+        self.assertEqual(self.adb.package(app.STOCK_CAST)['enabled'], 0)
+        self.assertFalse(self.adb.package(app.RUSSIAN_CAST)['installed'])
 
     def test_google_only_keeps_launcher_labels_and_ime(self):
         original = (self.adb.home_value, copy.deepcopy(self.adb.settings), copy.deepcopy(self.adb.tables))
         folder = self.install(google=True, ui=False, keyboard=False)
         self.assertEqual((self.adb.home_value, self.adb.settings, self.adb.tables), original)
         self.assertFalse(self.adb.package('com.dangbei.launcher3')['installed'])
+        self.assertEqual(self.adb.package(app.STOCK_CAST)['enabled'], 0)
+        self.assertFalse(self.adb.package(app.RUSSIAN_CAST)['installed'])
         app.restore(self.adb, self.manifest, folder)
         self.assertEqual((self.adb.home_value, self.adb.settings, self.adb.tables), original)
 
@@ -187,6 +194,19 @@ class InstallerTests(unittest.TestCase):
         self.install(keyboard=False)
         self.assertEqual(self.adb.setting('secure', 'default_input_method'), app.SOGOU)
         self.assertFalse(self.adb.package(KEYBOARD_PACKAGE)['installed'])
+
+    def test_original_receiver_is_disabled_only_after_replacement_is_verified(self):
+        original_install = self.adb.install
+
+        def interrupted_install(paths, downgrade=False):
+            if paths[0].name == 'Dangbei-Screencast-RU.apk':
+                raise app.Error('Receiver install failed')
+            return original_install(paths, downgrade)
+
+        self.adb.install = interrupted_install
+        with self.assertRaises(app.Error):
+            self.install()
+        self.assertEqual(self.adb.package(app.STOCK_CAST)['enabled'], 0)
 
     def test_failed_backup_blocks_all_mutations(self):
         self.adb.fail_pull = True

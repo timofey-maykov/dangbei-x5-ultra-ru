@@ -1,6 +1,6 @@
 {
   "version": "1.1.0",
-  "apk_release": "v1.0.0",
+  "apk_release": "v1.1.0",
   "repository": "timofey-maykov/dangbei-x5-ultra-ru",
   "compatibility": {
     "model": "DBX5 Ultra",
@@ -12,7 +12,8 @@
       "com.dangbei.leard.leradlauncher": 32421,
       "com.dangbei.leard.settings": 50000,
       "com.dangbei.systemui": 41001,
-      "com.dangbei.colormaster": 50003
+      "com.dangbei.colormaster": 50003,
+      "com.dangbei.screencast": 20879
     }
   },
   "packages": [
@@ -26,7 +27,7 @@
     {
       "package": "local.dangbei.settings.ru",
       "file": "Dangbei-Settings-RU.apk",
-      "sha256": "15fed2de98a00b456bc9f16b14b955170e629b06b6b6608d6242f169a048667f",
+      "sha256": "6a76bab55295b22ac63ea6eedd3b5c4cedecd7c1de07208e1b72c2db8e8bef4c",
       "bytes": 67458564,
       "version_code": 50000
     },
@@ -38,17 +39,24 @@
       "version_code": 50003
     },
     {
+      "package": "local.ru.db.screencast",
+      "file": "Dangbei-Screencast-RU.apk",
+      "version_code": 20879,
+      "sha256": "a726d4bacb0eff195277eeb4ac146d4633d38b44d5d11b5cd40f73e01157c60d",
+      "bytes": 52262666
+    },
+    {
       "package": "com.dangbei.launcher3",
       "file": "Dangbei-Launcher-RU.apk",
-      "sha256": "3e0e3030b33cfbd03ee8c3fd0a861fe90160f30eecbdbfa0c8c6d4ac6aaf891d",
-      "bytes": 88385340,
+      "sha256": "16457fed90762831bdb712cc1eed2db273803ad4224c9e9835c24a6ce12e68c5",
+      "bytes": 88389494,
       "version_code": 32421
     },
     {
       "package": "local.dangbei.sidebar.ru",
       "file": "Dangbei-Sidebar-RU.apk",
-      "sha256": "4dbecffdac2fbed6762288d9d573d942504602c70a7a72e97725e3ea0cf0d354",
-      "bytes": 14572470,
+      "sha256": "5339703a81f73c894bd3215458e061d41f3b5c723e4443e11b35ce5a45e254ac",
+      "bytes": 14580720,
       "version_code": 41001
     },
     {

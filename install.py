@@ -24,10 +24,12 @@ KEYBOARD = 'org.liskovsoft.androidtv.rukeyboard/com.liskovsoft.leankeyboard.ime.
 SOGOU = 'com.sohu.inputmethod.sogou.tv/.SogouIME'
 VOICE_IME = ('com.google.android.googlequicksearchbox/'
              'com.google.android.voicesearch.ime.VoiceInputMethodService')
+STOCK_CAST = 'com.dangbei.screencast'
+RUSSIAN_CAST = 'local.ru.db.screencast'
 STOCK_HOMES = ['com.dangbei.leard.leradlauncher', 'com.dangbei.tvlauncher',
                'com.dangbei.launcher.companion']
 ORIGINALS = STOCK_HOMES + ['com.dangbei.leard.settings', 'com.dangbei.systemui',
-                          'com.dangbei.colormaster', 'com.sohu.inputmethod.sogou.tv']
+                          'com.dangbei.colormaster', 'com.sohu.inputmethod.sogou.tv', STOCK_CAST]
 SETTINGS = [('global', 'hidden_api_policy'), ('system', 'system_locales'),
             ('system', 'settings_theme_type'), ('secure', 'default_input_method'),
             ('secure', 'enabled_input_methods'), ('secure', 'selected_input_method_subtype'),
@@ -41,6 +43,7 @@ OPS = {
     'local.dangbei.colormaster.ru': ['WRITE_SETTINGS', 'SYSTEM_ALERT_WINDOW'],
     'com.dangbei.launcher3': ['WRITE_SETTINGS'],
     'local.dangbei.sidebar.ru': ['SYSTEM_ALERT_WINDOW'],
+    RUSSIAN_CAST: ['SYSTEM_ALERT_WINDOW'],
 }
 URI = 'content://com.android.systemui.QuickCentre.data/'
 TABLES = {'quick_settings': 'typeID', 'quick_settings_common': 'typeID',
@@ -461,6 +464,12 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
             for op in OPS.get(pkg, []):
                 adb.shell('cmd', 'appops', 'set', '--user', '0', pkg, op, 'allow')
         if ui:
+            if any(p['package'] == RUSSIAN_CAST for p in selected_packages(manifest, keyboard, google, ui)):
+                step('Переключаю трансляцию на русскую версию')
+                if state['packages'][STOCK_CAST]['installed']:
+                    # Two receivers compete for the same network services. The
+                    # replacement APK has already been installed and verified.
+                    set_enabled(adb, STOCK_CAST, 3)
             adb.put('global', 'hidden_api_policy', '1')
             adb.put('system', 'settings_theme_type', '1')
             adb.put('system', 'system_locales', 'ru-RU')
@@ -483,6 +492,13 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
                     set_enabled(adb, pkg, 3)
             step('Подключаю боковую кнопку пульта')
             services = merge_service(state['settings']['secure/enabled_accessibility_services'])
+            # This ROM may leave an updated service in Crashed services. Remove
+            # only our service before rebinding; retain other enabled services.
+            remaining = ':'.join(s for s in services.split(':') if s != REMOTE)
+            adb.put('secure', 'enabled_accessibility_services', remaining or None)
+            time.sleep(2)  # Let AccessibilityManager observe the unbind first.
+            adb.shell('am', 'force-stop', '--user', '0', REMOTE.split('/')[0])
+            time.sleep(0.5)
             adb.put('secure', 'enabled_accessibility_services', services)
             adb.put('secure', 'accessibility_enabled', '1')
             for _ in range(10):
@@ -560,7 +576,10 @@ def restore(adb, manifest, folder):
             for permission, granted in info['permissions'].items():
                 if now.get(permission) != granted:
                     adb.shell('pm', 'grant' if granted else 'revoke', '--user', '0', pkg, permission)
-        for pkg in (set(STOCK_HOMES) if state.get('ui', True) else set()) | set(state['selected']):
+        originals = set(STOCK_HOMES) if state.get('ui', True) else set()
+        if state.get('ui', True) and STOCK_CAST in state['packages']:
+            originals.add(STOCK_CAST)
+        for pkg in originals | set(state['selected']):
             info = state['packages'][pkg]
             if info['installed']:
                 set_enabled(adb, pkg, info['enabled'])

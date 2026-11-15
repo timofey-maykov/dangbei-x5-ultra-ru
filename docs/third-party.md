@@ -8,6 +8,7 @@
 - `local.dangbei.settings.ru`, настройки на базе x5u_50000_A3F9EA2.
 - `local.dangbei.sidebar.ru`, боковая панель на базе X5U_41001_295FA2C.
 - `local.dangbei.colormaster.ru`, «Мастер изображения» на базе 5.0.0.3_B4A2D7E.
+- `local.ru.db.screencast`, «Трансляция» на базе Dangbei Cast v2.8.7.9.
 - `local.dangbei.settings.writer`, служебный модуль для записи настроек изображения. У него нет отдельного экрана.
 - [LeanKeyboard 6.1.31](https://github.com/yuliskov/LeanKeyboard/releases/tag/6.1.31), клавиатура для Android TV. [Лицензия автора](LeanKeyboard-LICENSE.txt) приложена к архиву.
 
