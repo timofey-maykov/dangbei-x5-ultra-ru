@@ -10,13 +10,14 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import ssl
 import subprocess
 import sys
 import time
 import urllib.request
 import uuid
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).resolve().parent
 HOME = 'com.dangbei.launcher3/com.dangbei.leard.leradlauncher.ui.splash.SplashActivity'
 REMOTE = 'local.dangbei.sidebar.ru/local.ru.RemoteService'
 KEYBOARD = 'org.liskovsoft.androidtv.rukeyboard/com.liskovsoft.leankeyboard.ime.LeanbackImeService'
@@ -54,6 +55,18 @@ LABELS = {1: 'Настройки', 12: 'Автофокус', 13: 'Фокус', 1
 
 class Error(RuntimeError):
     pass
+
+
+def external_env():
+    env = os.environ.copy()
+    if getattr(sys, 'frozen', False):
+        for key in ('LD_LIBRARY_PATH', 'LIBPATH'):
+            original = env.pop(key + '_ORIG', None)
+            if original is None:
+                env.pop(key, None)
+            else:
+                env[key] = original
+    return env
 
 
 def digest(path):
@@ -121,7 +134,7 @@ class ADB:
         command = [self.executable] + (['-s', self.device] if select else []) + list(args)
         try:
             p = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               timeout=timeout)
+                               timeout=timeout, env=external_env())
         except subprocess.TimeoutExpired:
             raise Error('ADB не ответил вовремя: ' + ' '.join(args[:3])) from None
         text = p.stdout.decode('utf-8', 'replace').strip()
@@ -248,11 +261,16 @@ def download(manifest, folder):
         if path.is_file() and digest(path) == item['sha256']:
             print('Уже скачан: ' + path.name)
             continue
-        url = f"https://github.com/{manifest['repository']}/releases/download/v{manifest['version']}/{item['file']}"
+        tag = manifest.get('apk_release', 'v' + manifest['version'])
+        url = f"https://github.com/{manifest['repository']}/releases/download/{tag}/{item['file']}"
         print('Скачиваю ' + path.name, flush=True)
         part = path.with_suffix('.part')
         try:
-            with urllib.request.urlopen(url, timeout=60) as response, part.open('wb') as f:
+            context = None
+            if getattr(sys, 'frozen', False):
+                import certifi
+                context = ssl.create_default_context(cafile=certifi.where())
+            with urllib.request.urlopen(url, timeout=60, context=context) as response, part.open('wb') as f:
                 shutil.copyfileobj(response, f)
             if part.stat().st_size != item['bytes'] or digest(part) != item['sha256']:
                 raise Error('Не совпала контрольная сумма ' + path.name)
@@ -618,6 +636,7 @@ def main(argv=None):
     parser.add_argument('--backups', type=Path, default=ROOT / 'backups')
     sub = parser.add_subparsers(dest='command')
     sub.add_parser('download', help='Скачать APK релиза и проверить SHA-256')
+    sub.add_parser('self-test', help='Проверить комплект на компьютере, без подключения к проектору')
     sub.add_parser('check', help='Проверить проектор, ничего не устанавливать')
     for name in ['backup', 'install']:
         p = sub.add_parser(name)
@@ -627,6 +646,11 @@ def main(argv=None):
     sub.add_parser('restore').add_argument('backup', type=Path)
     args = parser.parse_args(argv)
     manifest = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))
+    if args.command == 'self-test':
+        check_payload(manifest, args.apks, google=True)
+        print(ADB(args.adb, '').run('version', select=False))
+        print('Комплект проверен: все APK и ADB на месте. Проектор не менялся.')
+        return
     if args.command is None:
         if not menu(args, manifest):
             return
@@ -653,12 +677,17 @@ def main(argv=None):
             restore(adb, manifest, args.backup)
 
 
-if __name__ == '__main__':
+def run_cli():
     try:
         main()
+        return 0
     except (Error, OSError, ValueError, KeyError) as exc:
         print('Ошибка: ' + str(exc), file=sys.stderr)
-        sys.exit(1)
-    except KeyboardInterrupt:
+        return 1
+    except (KeyboardInterrupt, EOFError):
         print('\nОстановлено. Если установка началась, используйте сохранённый бэкап.', file=sys.stderr)
-        sys.exit(130)
+        return 130
+
+
+if __name__ == '__main__':
+    sys.exit(run_cli())

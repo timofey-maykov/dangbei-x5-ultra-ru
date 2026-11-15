@@ -6,6 +6,8 @@ tools/
 apks/
 dist/
 platform-tools/
+build/
+*.spec
 *.apk
 *.zip
 .DS_Store

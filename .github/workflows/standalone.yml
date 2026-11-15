@@ -1,0 +1,43 @@
+name: Standalone installers
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            architecture: x64
+          - os: macos-15-intel
+            target: macos-x64
+            architecture: x64
+          - os: macos-15
+            target: macos-arm64
+            architecture: arm64
+          - os: ubuntu-22.04
+            target: linux-x64
+            architecture: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - run: python -m pip install pyinstaller==6.22.3 certifi==2026.10.23
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/build_standalone.py --target ${{ matrix.target }}
+        env:
+          PYTHONUTF8: '1'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.target }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          compression-level: 0
+          if-no-files-found: error
