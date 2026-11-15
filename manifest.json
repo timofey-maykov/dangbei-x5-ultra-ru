@@ -1,0 +1,98 @@
+{
+  "version": "1.0.0",
+  "repository": "timofey-maykov/dangbei-x5-ultra-ru",
+  "compatibility": {
+    "model": "DBX5 Ultra",
+    "model_number": "X5U6128",
+    "device": "mt5879",
+    "sdk": "30",
+    "incremental": "3764",
+    "native_versions": {
+      "com.dangbei.leard.leradlauncher": 32421,
+      "com.dangbei.leard.settings": 50000,
+      "com.dangbei.systemui": 41001,
+      "com.dangbei.colormaster": 50003
+    }
+  },
+  "packages": [
+    {
+      "package": "local.dangbei.settings.writer",
+      "file": "Dangbei-Settings-Writer.apk",
+      "sha256": "3ddb44257a99e3ae233a81d2117063464d5ed51d8606cc38f79df478698c65e5",
+      "bytes": 12631,
+      "version_code": 1
+    },
+    {
+      "package": "local.dangbei.settings.ru",
+      "file": "Dangbei-Settings-RU.apk",
+      "sha256": "15fed2de98a00b456bc9f16b14b955170e629b06b6b6608d6242f169a048667f",
+      "bytes": 67458564,
+      "version_code": 50000
+    },
+    {
+      "package": "local.dangbei.colormaster.ru",
+      "file": "Dangbei-ColorMaster-RU.apk",
+      "sha256": "3db4a30b14d0c830ec08e1f6e6a5315031eb84235723f1740bb600c27124a673",
+      "bytes": 26514721,
+      "version_code": 50003
+    },
+    {
+      "package": "com.dangbei.launcher3",
+      "file": "Dangbei-Launcher-RU.apk",
+      "sha256": "3e0e3030b33cfbd03ee8c3fd0a861fe90160f30eecbdbfa0c8c6d4ac6aaf891d",
+      "bytes": 88385340,
+      "version_code": 32421
+    },
+    {
+      "package": "local.dangbei.sidebar.ru",
+      "file": "Dangbei-Sidebar-RU.apk",
+      "sha256": "4dbecffdac2fbed6762288d9d573d942504602c70a7a72e97725e3ea0cf0d354",
+      "bytes": 14572470,
+      "version_code": 41001
+    },
+    {
+      "package": "org.liskovsoft.androidtv.rukeyboard",
+      "file": "LeanKeyboard.apk",
+      "sha256": "5a90529fcae55c664128fb36e752f90e84d158266eced85084594c1d336a1468",
+      "bytes": 2753808,
+      "version_code": 201,
+      "keyboard": true
+    },
+    {
+      "package": "com.google.android.gsf",
+      "file": "GoogleServicesFramework.apk",
+      "sha256": "362f7093185f8510fa342de8740eeba540992352aaef484381719d14b77d2841",
+      "bytes": 6493685,
+      "version_code": 30,
+      "google": true
+    },
+    {
+      "package": "com.google.android.gms",
+      "file": "GooglePlayServices-TV.apk",
+      "sha256": "2d0796edbd2f85aa7f74ff8a578f38b66364bb13a07333e954e834027bbd8ea6",
+      "bytes": 76890606,
+      "version_code": 251633118,
+      "google": true
+    },
+    {
+      "package": "com.android.vending",
+      "file": "GooglePlayStore-base.apk",
+      "sha256": "a573e46b227c10dda8f519e362b25ed9f806a7d91ef67bdd01cc50df99094dad",
+      "bytes": 18177429,
+      "splits": [
+        {
+          "file": "GooglePlayStore-split_config.arm64_v8a.apk",
+          "sha256": "25775f8ac809ab4ddafa0c3e9192a697d71fac0d76c503e4a79a609c6ae75d77",
+          "bytes": 8139642
+        },
+        {
+          "file": "GooglePlayStore-split_config.ru.apk",
+          "sha256": "294e82b7d5fe3be35d7a93ceee1029db0f5a80548ed8c1747e7c52d62fc2639c",
+          "bytes": 250066
+        }
+      ],
+      "version_code": 85041408,
+      "google": true
+    }
+  ]
+}

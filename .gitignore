@@ -1,0 +1,21 @@
+# Device data and local tooling never belong in the repository.
+backup/
+backups/
+downloads/
+tools/
+apks/
+dist/
+platform-tools/
+*.apk
+*.zip
+.DS_Store
+__pycache__/
+*.pyc
+*.log
+*.jks
+*.keystore
+*.pem
+*.key
+.env*
+rollback-adb.sh
+rollback-russian-ui.sh
