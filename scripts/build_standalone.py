@@ -47,6 +47,19 @@ def smoke_test(folder):
             if result.returncode or expected not in result.stdout:
                 raise RuntimeError('Standalone smoke test failed:\n' + result.stdout + result.stderr)
             print(result.stdout)
+        # Exercise the exact start file offered to users as well as the binary.
+        wrapper_env = env.copy()
+        if os.name == 'nt':
+            system_root = Path(os.environ['SystemRoot'])
+            wrapper_env['PATH'] = str(system_root / 'System32') + ';' + str(system_root)
+            wrapper = [str(system_root / 'System32/cmd.exe'), '/d', '/c', str(folder / 'start.bat')]
+        else:
+            wrapper_env['PATH'] = '/usr/bin:/bin'
+            wrapper = ['/bin/bash', str(folder / ('start.command' if sys.platform == 'darwin' else 'start.sh'))]
+        result = subprocess.run(wrapper, input='0\n', capture_output=True, encoding='utf-8',
+                                env=wrapper_env, cwd=cwd, timeout=120)
+        if result.returncode or 'Русификация' not in result.stdout:
+            raise RuntimeError('Start file failed:\n' + result.stdout + result.stderr)
         # A damaged payload must fail the same preflight in a frozen release.
         manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
         apk = folder / 'apks' / manifest['packages'][0]['file']

@@ -69,6 +69,14 @@ def external_env():
     return env
 
 
+def restore_command(device, folder):
+    command = [sys.executable]
+    if not getattr(sys, 'frozen', False):
+        command.append(str(ROOT / 'install.py'))
+    command += ['--device', device, 'restore', str(folder)]
+    return subprocess.list2cmdline(command) if os.name == 'nt' else shlex.join(command)
+
+
 def digest(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as f:
@@ -497,8 +505,7 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
         journal['error'] = str(exc)
         save_json(folder / 'install.json', journal)
         print('\nУстановка остановлена. Бэкап: ' + str(folder.resolve()), file=sys.stderr)
-        print('Восстановление: python install.py --device ' + adb.device +
-              ' restore "' + str(folder.resolve()) + '"', file=sys.stderr)
+        print('Восстановление: ' + restore_command(adb.device, folder.resolve()), file=sys.stderr)
         raise
     finally:
         try:
