@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "apk_release": "v1.1.0",
+  "version": "1.2.0",
+  "apk_release": "v1.2.0",
   "repository": "timofey-maykov/dangbei-x5-ultra-ru",
   "compatibility": {
     "model": "DBX5 Ultra",
@@ -48,8 +48,8 @@
     {
       "package": "com.dangbei.launcher3",
       "file": "Dangbei-Launcher-RU.apk",
-      "sha256": "16457fed90762831bdb712cc1eed2db273803ad4224c9e9835c24a6ce12e68c5",
-      "bytes": 88389494,
+      "sha256": "39049b1bd44d817e3fb01a164f4f6c0d67c906e8317019b61242436c3e00bfee",
+      "bytes": 88414070,
       "version_code": 32421
     },
     {
