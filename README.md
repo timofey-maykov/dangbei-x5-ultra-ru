@@ -12,14 +12,14 @@
 
 ## Что скачать
 
-Откройте [релиз 1.2.0](https://github.com/timofey-maykov/dangbei-x5-ultra-ru/releases/tag/v1.2.0) и скачайте архив для своего компьютера:
+Откройте [релиз 1.2.1](https://github.com/timofey-maykov/dangbei-x5-ultra-ru/releases/tag/v1.2.1) и скачайте архив для своего компьютера:
 
 | Компьютер | Архив | Что открыть после распаковки |
 | --- | --- | --- |
-| Windows 10/11, 64 бита | `dangbei-x5-ultra-ru-1.2.0-windows-x64.zip` | `start.bat` |
-| Mac с M1/M2/M3/M4 и новее | `dangbei-x5-ultra-ru-1.2.0-macos-arm64.zip` | `start.command` |
-| Mac с Intel | `dangbei-x5-ultra-ru-1.2.0-macos-x64.zip` | `start.command` |
-| Linux x64, Ubuntu 22.04 и новее | `dangbei-x5-ultra-ru-1.2.0-linux-x64.zip` | `start.sh` |
+| Windows 10/11, 64 бита | `dangbei-x5-ultra-ru-1.2.1-windows-x64.zip` | `start.bat` |
+| Mac с M1/M2/M3/M4 и новее | `dangbei-x5-ultra-ru-1.2.1-macos-arm64.zip` | `start.command` |
+| Mac с Intel | `dangbei-x5-ultra-ru-1.2.1-macos-x64.zip` | `start.command` |
+| Linux x64, Ubuntu 22.04 и новее | `dangbei-x5-ultra-ru-1.2.1-linux-x64.zip` | `start.sh` |
 
 Python, ADB и все APK уже внутри. Устанавливать программы, прописывать PATH и вводить параметры запуска не нужно. Достаточно распаковать архив целиком в обычную папку, где есть около 2 ГБ свободного места. Не запускайте файл прямо из окна архиватора и не переносите его отдельно от остальных папок.
 

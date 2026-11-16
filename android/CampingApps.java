@@ -365,7 +365,7 @@ public final class CampingApps {
             if(p.measureText(first)>width){int cut=p.breakText(first,true,width,null);int space=first.lastIndexOf(' ',cut);if(space>0)cut=space;second=first.substring(cut).trim();first=first.substring(0,cut).trim();}
             canvas.drawText(first,r.left+22*s,r.top+119*s,p);
             if(!second.isEmpty()){while(second.length()>1&&p.measureText(second)>width)second=second.substring(0,second.length()-2)+"…";canvas.drawText(second,r.left+22*s,r.top+152*s,p);}
-            else {p.setTextSize(21*s);p.setColor(0xffadbdcf);canvas.drawText(add?"Выбрать из списка":folder?"Открыть папку":"Удерживайте OK",r.left+22*s,r.top+153*s,p);}
+            else if(add||folder){p.setTextSize(21*s);p.setColor(0xffadbdcf);canvas.drawText(add?"Выбрать из списка":"Открыть папку",r.left+22*s,r.top+153*s,p);}
         }
         public void setAlpha(int a){p.setAlpha(a);}public void setColorFilter(ColorFilter f){p.setColorFilter(f);}public int getOpacity(){return PixelFormat.TRANSLUCENT;}
     }
