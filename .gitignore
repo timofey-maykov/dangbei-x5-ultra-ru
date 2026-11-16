@@ -21,6 +21,3 @@ __pycache__/
 .env*
 rollback-adb.sh
 rollback-russian-ui.sh
-
-# Local forum drafts are not part of the public project.
-docs/4pda-post.*
