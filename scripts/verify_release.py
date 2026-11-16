@@ -37,7 +37,10 @@ for name in sorted(expected):
                        'patches/youtube-fix/src/local/ru/YouTubeAdBlock.java',
                        'patches/youtube-fix/src/local/ru/GoogleProcessGuard.java',
                        'scripts/build_youtube_fix.py']:
-            assert z.read(prefix + source) == Path(source).read_bytes(), source
+            # Git checks text out as CRLF on Windows and LF on Unix runners.
+            # Compare text content without rejecting those equivalent endings.
+            assert z.read(prefix + source).replace(b'\r\n', b'\n') == \
+                Path(source).read_bytes().replace(b'\r\n', b'\n'), source
         for package in manifest['packages']:
             for asset in [package] + package.get('splits', []):
                 entry = prefix + 'apks/' + asset['file']
