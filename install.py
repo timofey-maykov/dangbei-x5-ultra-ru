@@ -24,12 +24,15 @@ KEYBOARD = 'org.liskovsoft.androidtv.rukeyboard/com.liskovsoft.leankeyboard.ime.
 SOGOU = 'com.sohu.inputmethod.sogou.tv/.SogouIME'
 VOICE_IME = ('com.google.android.googlequicksearchbox/'
              'com.google.android.voicesearch.ime.VoiceInputMethodService')
+YOUTUBE = 'local.ru.youtube.tv'
+STOCK_YOUTUBE = 'com.google.android.youtube.tv'
+YOUTUBE_BOOT = YOUTUBE + '/local.ru.GoogleProcessGuard'
 STOCK_CAST = 'com.dangbei.screencast'
 RUSSIAN_CAST = 'local.ru.db.screencast'
 STOCK_HOMES = ['com.dangbei.leard.leradlauncher', 'com.dangbei.tvlauncher',
                'com.dangbei.launcher.companion']
 ORIGINALS = STOCK_HOMES + ['com.dangbei.leard.settings', 'com.dangbei.systemui',
-                          'com.dangbei.colormaster', 'com.sohu.inputmethod.sogou.tv', STOCK_CAST]
+                          'com.dangbei.colormaster', 'com.sohu.inputmethod.sogou.tv', STOCK_CAST, STOCK_YOUTUBE]
 SETTINGS = [('global', 'hidden_api_policy'), ('system', 'system_locales'),
             ('system', 'settings_theme_type'), ('secure', 'default_input_method'),
             ('secure', 'enabled_input_methods'), ('secure', 'selected_input_method_subtype'),
@@ -46,6 +49,8 @@ OPS = {
     RUSSIAN_CAST: ['SYSTEM_ALERT_WINDOW'],
 }
 URI = 'content://com.android.systemui.QuickCentre.data/'
+PROCESS_PROTECT_URI = 'content://com.dangbei.dangbeiref.data/process_protect_list_info'
+GOOGLE_PROCESSES = ('com.google.android.gms', 'com.google.android.gsf')
 TABLES = {'quick_settings': 'typeID', 'quick_settings_common': 'typeID',
           'quick_app': 'jumpUrl', 'quick_app_common': 'packageName'}
 LABELS = {1: 'Настройки', 12: 'Автофокус', 13: 'Фокус', 17: 'Геометрия',
@@ -248,17 +253,17 @@ def preflight(adb, manifest):
     return device
 
 
-def selected_packages(manifest, keyboard=True, google=False, ui=True):
+def selected_packages(manifest, keyboard=True, google=False, ui=True, youtube=False):
     return [p for p in manifest['packages'] if
-            (google if p.get('google') else ui and (keyboard or not p.get('keyboard')))]
+            (youtube if p.get('youtube') else google if p.get('google') else ui and (keyboard or not p.get('keyboard')))]
 
 
 def assets(package):
     return [package] + package.get('splits', [])
 
 
-def check_payload(manifest, folder, keyboard=True, google=False, ui=True):
-    for package in selected_packages(manifest, keyboard, google, ui):
+def check_payload(manifest, folder, keyboard=True, google=False, ui=True, youtube=False):
+    for package in selected_packages(manifest, keyboard, google, ui, youtube):
         for item in assets(package):
             path = folder / item['file']
             if not path.is_file() or path.stat().st_size != item['bytes'] or digest(path) != item['sha256']:
@@ -290,9 +295,9 @@ def download(manifest, folder):
             part.unlink(missing_ok=True)
 
 
-def backup(adb, manifest, root, keyboard=True, google=False, ui=True):
+def backup(adb, manifest, root, keyboard=True, google=False, ui=True, youtube=False):
     device = preflight(adb, manifest)
-    selected = selected_packages(manifest, keyboard, google, ui)
+    selected = selected_packages(manifest, keyboard, google, ui, youtube)
     root.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(root).free < 1024 ** 3:
         raise Error('Для бэкапа нужен хотя бы 1 ГБ свободного места на компьютере.')
@@ -301,12 +306,14 @@ def backup(adb, manifest, root, keyboard=True, google=False, ui=True):
     folder.mkdir(mode=0o700)
     state = {'format': 1, 'complete': False, 'device': device, 'version': manifest['version'],
              'created_at': dt.datetime.now().astimezone().isoformat(), 'home': adb.home(),
-             'selected': [p['package'] for p in selected], 'ui': ui, 'google': google,
+             'selected': [p['package'] for p in selected], 'ui': ui, 'google': google, 'youtube': youtube,
              'settings': {}, 'packages': {},
              'tables': {}, 'files': {}, 'dexopt': adb.shell('getprop', 'pm.dexopt.install')}
     save_json(folder / 'backup.json', state)
     print('Бэкап: ' + str(folder.resolve()), flush=True)
     try:
+        if google:
+            state['google_process_protection'] = google_process_protection(adb)
         for ns, key in SETTINGS:
             state['settings'][ns + '/' + key] = adb.setting(ns, key)
         for pkg in dict.fromkeys(ORIGINALS + state['selected']):
@@ -371,6 +378,11 @@ def validate_backup(folder, manifest, device):
             raise Error('В бэкапе нет APK: ' + pkg)
     if set(state['tables']) != set(TABLES):
         raise Error('В бэкапе не хватает подписей панели.')
+    protection = state.get('google_process_protection')
+    if protection is not None and (not isinstance(protection, dict)
+            or set(protection) != set(GOOGLE_PROCESSES)
+            or any(type(value) is not bool for value in protection.values())):
+        raise Error('Некорректный список исключений Google в бэкапе.')
     return state
 
 
@@ -417,14 +429,42 @@ def configure_keyboard(adb):
         raise Error('Не удалось выбрать LeanKeyboard.')
 
 
-def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui=True):
-    check_payload(manifest, payload, keyboard, google, ui)
+def google_process_protection(adb):
+    raw = adb.shell('content', 'query', '--uri', PROCESS_PROTECT_URI,
+                    '--projection', 'appPackageName')
+    if raw.strip() != 'No result found.' and not raw.lstrip().startswith('Row:'):
+        raise Error('Не удалось прочитать исключения очистки памяти Dangbei.')
+    packages = set(re.findall(r'appPackageName=([\w.]+)(?=,|\s|$)', raw))
+    return {pkg: pkg in packages for pkg in GOOGLE_PROCESSES}
+
+
+def set_google_process_protection(adb, desired):
+    # DAST otherwise stops GMS and Android also kills its dependent video player.
+    # The stock provider notifies DAST itself. Keep all unrelated entries intact.
+    current = google_process_protection(adb)
+    for pkg in GOOGLE_PROCESSES:
+        if current[pkg] == desired[pkg]:
+            continue
+        if desired[pkg]:
+            adb.shell('content', 'insert', '--uri', PROCESS_PROTECT_URI,
+                      '--bind', 'appPackageName:s:' + pkg,
+                      '--bind', 'appName:s:' + pkg, '--bind', 'appVersion:s:0')
+        else:
+            adb.shell('content', 'delete', '--uri', PROCESS_PROTECT_URI,
+                      '--where', "appPackageName='" + pkg + "'")
+    if google_process_protection(adb) != desired:
+        raise Error('Не удалось сохранить исключения очистки памяти для Google.')
+
+
+def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui=True, youtube=False):
+    google = google or youtube
+    check_payload(manifest, payload, keyboard, google, ui, youtube)
     preflight(adb, manifest)
-    for item in selected_packages(manifest, keyboard, google, ui):
+    for item in selected_packages(manifest, keyboard, google, ui, youtube):
         current = adb.package(item['package'])
-        if current['installed'] and current['version_code'] > item['version_code']:
+        if current['installed'] and current['version_code'] > item['version_code'] and not item.get('google'):
             raise Error('Уже установлена более новая версия: ' + item['package'])
-    folder, state = backup(adb, manifest, backup_root, keyboard, google, ui)
+    folder, state = backup(adb, manifest, backup_root, keyboard, google, ui, youtube)
     journal = {'status': 'installing', 'steps': []}
 
     def step(message):
@@ -435,9 +475,13 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
     try:
         step('Устанавливаю приложения')
         adb.shell('setprop', 'pm.dexopt.install', 'verify')
-        for item in selected_packages(manifest, keyboard, google, ui):
+        for item in selected_packages(manifest, keyboard, google, ui, youtube):
             step('  ' + item['file'])
             current = adb.package(item['package'])
+            if item.get('google') and current['installed'] and current['version_code'] > item['version_code']:
+                print('    Оставляю установленную более новую версию Google.', flush=True)
+                set_enabled(adb, item['package'], 1)
+                continue
             expected_hashes = {asset['sha256'] for asset in assets(item)}
             same = (current['installed'] and len(current['paths']) == len(assets(item)) and
                     {adb.shell('sha256sum', p).split()[0] for p in current['paths']} == expected_hashes)
@@ -455,7 +499,7 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
                 raise Error('Установленный APK не совпадает с релизом: ' + item['package'])
             set_enabled(adb, item['package'], 1)
         step('Настраиваю разрешения')
-        for item in selected_packages(manifest, keyboard, google, ui):
+        for item in selected_packages(manifest, keyboard, google, ui, youtube):
             pkg = item['package']
             info = adb.package(pkg)
             for perm, granted in info['permissions'].items():
@@ -463,8 +507,11 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
                     adb.shell('pm', 'grant', '--user', '0', pkg, perm)
             for op in OPS.get(pkg, []):
                 adb.shell('cmd', 'appops', 'set', '--user', '0', pkg, op, 'allow')
+        if google:
+            step('Защищаю сервисы Google от очистки памяти Dangbei')
+            set_google_process_protection(adb, dict.fromkeys(GOOGLE_PROCESSES, True))
         if ui:
-            if any(p['package'] == RUSSIAN_CAST for p in selected_packages(manifest, keyboard, google, ui)):
+            if any(p['package'] == RUSSIAN_CAST for p in selected_packages(manifest, keyboard, google, ui, youtube)):
                 step('Переключаю трансляцию на русскую версию')
                 if state['packages'][STOCK_CAST]['installed']:
                     # Two receivers compete for the same network services. The
@@ -512,6 +559,17 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
             for key in ['enabled_accessibility_services', 'accessibility_enabled',
                         'enabled_input_methods', 'default_input_method', 'selected_input_method_subtype']:
                 adb.put('secure', key, state['settings']['secure/' + key])
+        if youtube:
+            step('Настраиваю YouTube Fix')
+            adb.put('global', 'hidden_api_policy', '1')
+            result = adb.shell('am', 'broadcast', '--user', '0', '--include-stopped-packages',
+                               '-a', YOUTUBE + '.PROTECT_GOOGLE', '-n', YOUTUBE_BOOT)
+            if not re.search(r'result=1\b', result):
+                raise Error('YouTube Fix не подтвердил защиту сервисов Google от очистки памяти.')
+            adb.shell('am', 'start', '--user', '0', '-n',
+                      YOUTUBE + '/com.google.android.apps.youtube.tv.activity.ShellActivity')
+            if state['packages'][STOCK_YOUTUBE]['installed']:
+                set_enabled(adb, STOCK_YOUTUBE, 3)
         if keyboard and ui and adb.setting('secure', 'default_input_method') != KEYBOARD:
             raise Error('Прошивка сменила клавиатуру. Смотрите раздел «Клавиатура» в README.')
         journal['status'] = 'complete'
@@ -529,7 +587,11 @@ def install(adb, manifest, payload, backup_root, keyboard=True, google=False, ui
         except Error as exc:
             print('Не удалось вернуть pm.dexopt.install: ' + str(exc), file=sys.stderr)
     print('\nГотово. Бэкап: ' + str(folder.resolve()))
-    print('Перезагрузите проектор обычным способом. Проверьте боковую кнопку и раскладки клавиатуры.')
+    print('Перезагрузите проектор обычным способом.')
+    if ui:
+        print('Проверьте боковую кнопку и раскладки клавиатуры.')
+    if youtube:
+        print('Откройте YouTube Fix и проверьте воспроизведение видео.')
     if google:
         print('После перезагрузки откройте Google Play и войдите в свой аккаунт.')
     return folder
@@ -577,6 +639,8 @@ def restore(adb, manifest, folder):
                 if now.get(permission) != granted:
                     adb.shell('pm', 'grant' if granted else 'revoke', '--user', '0', pkg, permission)
         originals = set(STOCK_HOMES) if state.get('ui', True) else set()
+        if state.get('youtube') and STOCK_YOUTUBE in state['packages']:
+            originals.add(STOCK_YOUTUBE)
         if state.get('ui', True) and STOCK_CAST in state['packages']:
             originals.add(STOCK_CAST)
         for pkg in originals | set(state['selected']):
@@ -585,8 +649,10 @@ def restore(adb, manifest, folder):
                 set_enabled(adb, pkg, info['enabled'])
         # Last: Android may alter these while packages and IMEs are changed.
         for ns, key in SETTINGS:
-            if state.get('ui', True) or ns == 'secure':
+            if state.get('ui', True) or ns == 'secure' or (state.get('youtube') and key == 'hidden_api_policy'):
                 adb.put(ns, key, state['settings'][ns + '/' + key])
+        if 'google_process_protection' in state:
+            set_google_process_protection(adb, state['google_process_protection'])
         adb.shell('setprop', 'pm.dexopt.install', state['dexopt'])
         if state.get('ui', True) and adb.home().split('/')[0] != home_pkg:
             raise Error('Не удалось вернуть главный экран')
@@ -616,24 +682,26 @@ def lock(root, serial):
 
 
 def menu(args, manifest):
-    print('\nDangbei X5 Ultra: русский интерфейс и Google\n')
+    print('\nDangbei X5 Ultra: русский интерфейс, Google и YouTube Fix\n')
     print('  1. Русификация и клавиатура')
     print('  2. Только сервисы Google и Play Маркет')
-    print('  3. Всё сразу: русификация, клавиатура и Google')
+    print('  3. Всё сразу: русификация, клавиатура, Google и YouTube Fix')
     print('  4. Только бэкап, ничего не менять')
     print('  5. Восстановить из бэкапа')
     print('  6. Проверить совместимость')
     print('  7. Скачать файлы релиза')
+    print('  8. YouTube Fix с блокировкой рекламы и сервисами Google')
     print('  0. Выход\n')
     choice = input('Что делаем? ').strip()
     if choice == '0':
         return False
     actions = {'1': 'install', '2': 'install-google', '3': 'install', '4': 'backup',
-               '5': 'restore', '6': 'check', '7': 'download'}
+               '5': 'restore', '6': 'check', '7': 'download', '8': 'install-youtube'}
     if choice not in actions:
-        raise Error('Введите номер от 0 до 7.')
+        raise Error('Введите номер от 0 до 8.')
     args.command = actions[choice]
-    args.google = choice in {'2', '3', '4'}
+    args.google = choice in {'2', '3', '4', '8'}
+    args.youtube = choice in {'3', '4', '8'}
     args.no_keyboard = False
     if choice == '5':
         folders = sorted(args.backups.glob('*/backup.json'), reverse=True)
@@ -668,12 +736,14 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument('--no-keyboard', action='store_true', help='Сохранить текущую клавиатуру')
         p.add_argument('--google', action='store_true', help='Также установить/сохранить сервисы Google')
+        p.add_argument('--youtube', action='store_true', help='Также установить/сохранить YouTube Fix')
+    sub.add_parser('install-youtube', help='YouTube Fix и Google, без смены лаунчера и клавиатуры')
     sub.add_parser('install-google', help='Только Google, без смены интерфейса')
     sub.add_parser('restore').add_argument('backup', type=Path)
     args = parser.parse_args(argv)
     manifest = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))
     if args.command == 'self-test':
-        check_payload(manifest, args.apks, google=True)
+        check_payload(manifest, args.apks, google=True, youtube=True)
         print(ADB(args.adb, '').run('version', select=False))
         print('Комплект проверен: все APK и ADB на месте. Проектор не менялся.')
         return
@@ -694,9 +764,11 @@ def main(argv=None):
             preflight(adb, manifest)
             print('Проверка пройдена. Ничего не установлено.')
         elif args.command == 'backup':
-            backup(adb, manifest, args.backups, not args.no_keyboard, args.google)
+            backup(adb, manifest, args.backups, not args.no_keyboard, args.google or args.youtube, youtube=args.youtube)
         elif args.command == 'install':
-            install(adb, manifest, args.apks, args.backups, not args.no_keyboard, args.google)
+            install(adb, manifest, args.apks, args.backups, not args.no_keyboard, args.google, youtube=args.youtube)
+        elif args.command == 'install-youtube':
+            install(adb, manifest, args.apks, args.backups, keyboard=False, google=True, ui=False, youtube=True)
         elif args.command == 'install-google':
             install(adb, manifest, args.apks, args.backups, keyboard=False, google=True, ui=False)
         else:

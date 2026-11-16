@@ -16,6 +16,7 @@ class FakeADB:
     def __init__(self, manifest, payload, backup_root):
         self.manifest, self.payload, self.backup_root = manifest, payload, backup_root
         self.calls, self.mutations = [], []
+        self.process_protection = set()
         self.fail_pull = False
         self.bad_pull = False
         self.fail_install = False
@@ -102,6 +103,9 @@ class FakeADB:
         if args[0] == 'sha256sum':
             return hashlib.sha256(self.data[args[1]]).hexdigest() + '  ' + args[1]
         if args[:2] == ('content', 'query'):
+            if app.PROCESS_PROTECT_URI in args:
+                return '\n'.join('Row: %d appPackageName=%s' % (i, pkg)
+                                 for i, pkg in enumerate(sorted(self.process_protection))) or 'No result found.'
             table = args[args.index('--uri') + 1].split('/')[-1]
             return '\n'.join('Row: ' + str(i) + ' ' + ', '.join(k + '=' + v for k, v in row.items())
                              for i, row in enumerate(self.tables[table]))
@@ -112,6 +116,15 @@ class FakeADB:
         if args[0] == 'setprop':
             self.mutate(args)
             self.props[args[1]] = args[2]
+        elif args[0] == 'content' and app.PROCESS_PROTECT_URI in args:
+            self.mutate(args)
+            if args[1] == 'insert':
+                pkg = next(a.split(':', 2)[2] for a in args if a.startswith('appPackageName:s:'))
+                self.process_protection.add(pkg)
+            elif args[1] == 'delete':
+                self.process_protection.discard(args[-1].split("'")[1])
+            else:
+                raise AssertionError(args)
         elif args[:2] == ('content', 'update'):
             self.mutate(args)
             table = args[args.index('--uri') + 1].split('/')[-1]
@@ -135,6 +148,9 @@ class FakeADB:
                 self.settings['secure/default_input_method'] = args[-1]
         elif args[0] == 'am' and args[1] in ['start', 'force-stop']:
             self.mutate(args)
+        elif args[:2] == ('am', 'broadcast'):
+            self.mutate(args)
+            return 'Broadcast completed: result=1'
         else:
             raise AssertionError(args)
         return ''
@@ -190,10 +206,79 @@ class InstallerTests(unittest.TestCase):
         app.restore(self.adb, self.manifest, folder)
         self.assertEqual((self.adb.home_value, self.adb.settings, self.adb.tables), original)
 
+    def test_google_protection_backup_restore_preserves_other_entries(self):
+        self.adb.process_protection = {'com.google.android.gms', 'example.player'}
+        folder = self.install(google=True, ui=False, keyboard=False)
+        self.assertEqual(self.adb.process_protection,
+                         {'com.google.android.gms', 'com.google.android.gsf', 'example.player'})
+        state = json.loads((folder / 'backup.json').read_text())
+        self.assertEqual(state['google_process_protection'],
+                         {'com.google.android.gms': True, 'com.google.android.gsf': False})
+        self.adb.process_protection.add('example.added.later')
+        app.restore(self.adb, self.manifest, folder)
+        self.assertEqual(self.adb.process_protection,
+                         {'com.google.android.gms', 'example.player', 'example.added.later'})
+
     def test_no_keyboard_keeps_user_choice(self):
         self.install(keyboard=False)
         self.assertEqual(self.adb.setting('secure', 'default_input_method'), app.SOGOU)
         self.assertFalse(self.adb.package(KEYBOARD_PACKAGE)['installed'])
+
+    def test_youtube_only_backup_install_and_restore(self):
+        original = copy.deepcopy(self.adb.settings)
+        home = self.adb.home_value
+        folder = self.install(youtube=True, ui=False, keyboard=False)
+        self.assertEqual(self.adb.home_value, home)
+        self.assertEqual(self.adb.setting('secure', 'default_input_method'), app.SOGOU)
+        self.assertTrue(self.adb.package(app.YOUTUBE)['installed'])
+        self.assertTrue(self.adb.package('com.google.android.gms')['installed'])
+        self.assertFalse(self.adb.package('com.dangbei.launcher3')['installed'])
+        self.assertEqual(self.adb.package(app.STOCK_YOUTUBE)['enabled'], 3)
+        events = self.adb.mutations
+        verify = next(i for i,c in enumerate(events) if c[:2] == ('am','broadcast'))
+        disable = next(i for i,c in enumerate(events) if c[:2] == ('pm','disable-user') and c[-1] == app.STOCK_YOUTUBE)
+        self.assertLess(verify, disable)
+        app.restore(self.adb, self.manifest, folder)
+        self.assertEqual(self.adb.settings, original)
+        self.assertEqual(self.adb.package(app.STOCK_YOUTUBE)['enabled'], 0)
+        self.assertFalse(self.adb.package(app.YOUTUBE)['installed'])
+
+    def test_youtube_keeps_newer_google_services(self):
+        self.install(google=True, ui=False, keyboard=False)
+        pkg = 'com.google.android.gms'
+        self.adb.packages[pkg]['version_code'] += 100
+        mark = len(self.adb.mutations)
+        folder = self.install(youtube=True, ui=False, keyboard=False)
+        self.assertFalse(any(c[0] == 'install' and 'GooglePlayServices' in str(c)
+                             for c in self.adb.mutations[mark:]))
+        state = json.loads((folder / 'backup.json').read_text())
+        self.assertEqual(state['packages'][pkg]['version_code'], self.adb.package(pkg)['version_code'])
+
+    def test_default_install_does_not_add_youtube(self):
+        self.install()
+        self.assertFalse(self.adb.package(app.YOUTUBE)['installed'])
+        self.assertEqual(self.adb.package(app.STOCK_YOUTUBE)['enabled'], 0)
+
+    def test_youtube_guard_failure_keeps_stock_youtube_enabled(self):
+        shell = self.adb.shell
+        def failed_guard(*args, **kwargs):
+            if args[:2] == ('am', 'broadcast'):
+                return 'Broadcast completed: result=0'
+            return shell(*args, **kwargs)
+        self.adb.shell = failed_guard
+        with self.assertRaises(app.Error):
+            self.install(youtube=True, ui=False, keyboard=False)
+        self.assertEqual(self.adb.package(app.STOCK_YOUTUBE)['enabled'], 0)
+
+    def test_menu_all_and_youtube_only(self):
+        import argparse
+        for choice, command in [('3', 'install'), ('8', 'install-youtube')]:
+            args = argparse.Namespace(device='test', backups=self.backups)
+            with patch('builtins.input', return_value=choice):
+                self.assertTrue(app.menu(args, self.manifest))
+            self.assertEqual(args.command, command)
+            self.assertTrue(args.google)
+            self.assertTrue(args.youtube)
 
     def test_original_receiver_is_disabled_only_after_replacement_is_verified(self):
         original_install = self.adb.install

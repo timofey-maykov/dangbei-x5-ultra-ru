@@ -31,6 +31,13 @@ for name in sorted(expected):
         assert metadata['commit'] == os.environ['RELEASE_COMMIT'], name
         assert name == f'dangbei-x5-ultra-ru-{version}-{metadata["target"]}.zip'
         assert json.loads(z.read(prefix + 'manifest.json')) == manifest, name
+        for source in ['patches/youtube-fix/LICENSE', 'patches/youtube-fix/README.md',
+                       'patches/youtube-fix/filter.js', 'patches/youtube-fix/patch.py',
+                       'patches/youtube-fix/test-filter.cjs',
+                       'patches/youtube-fix/src/local/ru/YouTubeAdBlock.java',
+                       'patches/youtube-fix/src/local/ru/GoogleProcessGuard.java',
+                       'scripts/build_youtube_fix.py']:
+            assert z.read(prefix + source) == Path(source).read_bytes(), source
         for package in manifest['packages']:
             for asset in [package] + package.get('splits', []):
                 entry = prefix + 'apks/' + asset['file']

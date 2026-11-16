@@ -10,6 +10,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ['install.py', 'manifest.json', 'README.md', 'LICENSE', 'start.sh', 'start.bat',
          'docs/testing.md', 'docs/third-party.md', 'docs/LeanKeyboard-LICENSE.txt']
+FILES += ['patches/youtube-fix/LICENSE', 'patches/youtube-fix/README.md', 'patches/youtube-fix/filter.js', 'patches/youtube-fix/patch.py', 'patches/youtube-fix/test-filter.cjs', 'patches/youtube-fix/src/local/ru/YouTubeAdBlock.java', 'patches/youtube-fix/src/local/ru/GoogleProcessGuard.java', 'scripts/build_youtube_fix.py']
 
 
 def sha(path):

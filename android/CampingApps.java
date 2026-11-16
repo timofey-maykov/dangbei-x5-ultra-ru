@@ -85,8 +85,12 @@ public final class CampingApps {
             if(ADD.equals(key)||key.startsWith(PREFIX)||key.startsWith(GROUP)){
                 if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;int[] old=new int[group.getChildCount()];for(int i=0;i<old.length;i++){old[i]=group.getChildAt(i).getVisibility();group.getChildAt(i).setVisibility(View.INVISIBLE);}VISIBILITY.put(view,old);}
                 String title=ADD.equals(key)?"Добавить приложение":key.startsWith(GROUP)?title(vm):label(view.getContext(),key.substring(PREFIX.length()));
-                Drawable icon=null;if(key.startsWith(PREFIX))try{icon=view.getContext().getPackageManager().getApplicationIcon(key.substring(PREFIX.length()));}catch(Exception ignored){}
-                view.setForeground(new TileArt(view,title,icon,ADD.equals(key),key.startsWith(GROUP)));view.setContentDescription(title);
+                Drawable icon=null,banner=null;if(key.startsWith(PREFIX)){
+                    String pkg=key.substring(PREFIX.length());PackageManager pm=view.getContext().getPackageManager();
+                    try{icon=pm.getApplicationIcon(pkg);}catch(Exception ignored){}
+                    try{Intent launch=pm.getLeanbackLaunchIntentForPackage(pkg);if(launch!=null){ResolveInfo info=pm.resolveActivity(launch,0);if(info!=null)banner=info.activityInfo.loadBanner(pm);}if(banner==null)banner=pm.getApplicationBanner(pkg);}catch(Exception ignored){}
+                }
+                view.setForeground(new TileArt(view,title,icon,banner,ADD.equals(key),key.startsWith(GROUP)));view.setContentDescription(title);
             }
             size(view);
         }catch(Exception e){Log.e("CampingApps","Cannot bind tile",e);}
@@ -352,9 +356,26 @@ public final class CampingApps {
         });
     }
     private static final class TileArt extends Drawable {
-        final View owner;final String title;final Drawable icon;final boolean add,folder;final Paint p=new Paint(3);
-        TileArt(View owner,String title,Drawable icon,boolean add,boolean folder){this.owner=owner;this.title=title;this.icon=icon;this.add=add;this.folder=folder;}
+        final View owner;final String title;final Drawable icon,banner;final boolean add,folder;final Paint p=new Paint(3);final int appColor;
+        TileArt(View owner,String title,Drawable icon,Drawable banner,boolean add,boolean folder){this.owner=owner;this.title=title;this.icon=icon;this.banner=banner;this.add=add;this.folder=folder;this.appColor=iconColor(icon);}
+        private static int iconColor(Drawable icon){
+            if(icon==null)return 0xff33466a;
+            Rect old=new Rect(icon.getBounds());Bitmap bitmap=Bitmap.createBitmap(24,24,Bitmap.Config.ARGB_8888);
+            try{icon.setBounds(0,0,24,24);icon.draw(new Canvas(bitmap));long red=0,green=0,blue=0,weight=0;for(int y=0;y<24;y++)for(int x=0;x<24;x++){int color=bitmap.getPixel(x,y),a=Color.alpha(color);red+=Color.red(color)*a;green+=Color.green(color)*a;blue+=Color.blue(color)*a;weight+=a;}if(weight>0)return Color.rgb((int)(red/weight*.55),(int)(green/weight*.55),(int)(blue/weight*.55));return 0xff33466a;}catch(Exception ignored){return 0xff33466a;}finally{icon.setBounds(old);bitmap.recycle();}
+        }
+        private void focus(Canvas canvas,Rect r,float s,float corner){if(owner.hasFocus()){p.setShader(null);p.setColor(0xff71d8e9);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3*s);canvas.drawRoundRect(new RectF(r.left+2*s,r.top+2*s,r.right-2*s,r.bottom-2*s),corner,corner,p);p.setStyle(Paint.Style.FILL);}}
         public void draw(Canvas canvas){Rect r=getBounds();float s=r.width()/320f;float corner=20*s;
+            if(!add&&!folder){
+                int save=canvas.save();Path clip=new Path();clip.addRoundRect(new RectF(r),corner,corner,Path.Direction.CW);canvas.clipPath(clip);
+                p.setShader(new LinearGradient(r.left,r.top,r.right,r.bottom,appColor,0xff111b29,Shader.TileMode.CLAMP));canvas.drawRect(r,p);p.setShader(null);
+                if(banner!=null&&banner.getIntrinsicWidth()>0&&banner.getIntrinsicHeight()>0){
+                    float scale=Math.max(r.width()/(float)banner.getIntrinsicWidth(),r.height()/(float)banner.getIntrinsicHeight());int w=Math.round(banner.getIntrinsicWidth()*scale),h=Math.round(banner.getIntrinsicHeight()*scale);int x=Math.round(r.exactCenterX()-w/2f),y=Math.round(r.exactCenterY()-h/2f);banner.setBounds(x,y,x+w,y+h);banner.draw(canvas);
+                }else{
+                    if(icon!=null){float size=Math.min(r.height()*.72f,r.width()*.56f);int x=Math.round(r.exactCenterX()-size/2),y=Math.round(r.top+r.height()*.05f);icon.setBounds(x,y,x+Math.round(size),y+Math.round(size));icon.draw(canvas);}
+                    p.setShader(new LinearGradient(0,r.top+r.height()*.62f,0,r.bottom,0x00111b29,0xe6111b29,Shader.TileMode.CLAMP));canvas.drawRect(r,p);p.setShader(null);p.setTypeface(Typeface.create("sans-serif-medium",0));p.setTextSize(25*s);p.setColor(Color.WHITE);String caption=title;float width=r.width()-32*s;if(p.measureText(caption)>width){int n=p.breakText(caption,true,width-p.measureText("…"),null);caption=caption.substring(0,n).trim()+"…";}canvas.drawText(caption,r.exactCenterX()-p.measureText(caption)/2,r.bottom-15*s,p);
+                }
+                canvas.restoreToCount(save);focus(canvas,r,s,corner);return;
+            }
             p.setShader(new LinearGradient(r.left,r.top,r.right,r.bottom,add?0xff355363:0xff33466a,add?0xff243946:0xff263247,Shader.TileMode.CLAMP));canvas.drawRoundRect(new RectF(r),corner,corner,p);p.setShader(null);
             if(owner.hasFocus()){p.setColor(0xff71d8e9);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(3*s);canvas.drawRoundRect(new RectF(r.left+2*s,r.top+2*s,r.right-2*s,r.bottom-2*s),corner,corner,p);p.setStyle(Paint.Style.FILL);}
             if(icon!=null){icon.setBounds(r.left+(int)(22*s),r.top+(int)(18*s),r.left+(int)(86*s),r.top+(int)(82*s));icon.draw(canvas);}

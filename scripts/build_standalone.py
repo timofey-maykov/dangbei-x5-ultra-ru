@@ -19,6 +19,7 @@ import install
 PUBLIC_FILES = ['manifest.json', 'README.md', 'LICENSE', 'start.bat', 'start.sh',
                 'start.command', 'docs/testing.md', 'docs/third-party.md',
                 'docs/LeanKeyboard-LICENSE.txt']
+PUBLIC_FILES += ['patches/youtube-fix/LICENSE', 'patches/youtube-fix/README.md', 'patches/youtube-fix/filter.js', 'patches/youtube-fix/patch.py', 'patches/youtube-fix/test-filter.cjs', 'patches/youtube-fix/src/local/ru/YouTubeAdBlock.java', 'patches/youtube-fix/src/local/ru/GoogleProcessGuard.java', 'scripts/build_youtube_fix.py']
 
 
 def unpack(archive, destination):
@@ -46,6 +47,8 @@ def smoke_test(folder):
                                     encoding='utf-8', env=env, cwd=cwd, timeout=120)
             if result.returncode or expected not in result.stdout:
                 raise RuntimeError('Standalone smoke test failed:\n' + result.stdout + result.stderr)
+            if not args and 'YouTube Fix' not in result.stdout:
+                raise RuntimeError('YouTube Fix missing from standalone menu')
             print(result.stdout)
         # Exercise the exact start file offered to users as well as the binary.
         wrapper_env = env.copy()
@@ -86,7 +89,7 @@ def build(args):
     payload = args.apk_dir.resolve()
     if not args.offline:
         install.download(manifest, payload)
-    install.check_payload(manifest, payload, google=True)
+    install.check_payload(manifest, payload, google=True, youtube=True)
     tools = json.loads((ROOT / 'scripts/platform-tools.json').read_text())[system]
     tools_zip = build_root / 'platform-tools.zip'
     if not tools_zip.is_file() or install.digest(tools_zip) != tools['sha256']:

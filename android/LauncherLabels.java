@@ -11,6 +11,26 @@ import java.util.Map;
 /** Local UI labels. Film artwork and server content are left intact. */
 public final class LauncherLabels {
     private static final Map<String,String> LABELS = new HashMap<>();
+    private static boolean googleProtected;
+    private static long googleCheckAt;
+    private static void protectGoogleServices(android.content.Context context) {
+        if (googleProtected || android.os.SystemClock.elapsedRealtime() < googleCheckAt) return;
+        googleCheckAt = android.os.SystemClock.elapsedRealtime() + 60000;
+        try {
+            context.getPackageManager().getApplicationInfo("com.google.android.gms", 0);
+            Object dast = context.getSystemService("Dast");
+            if (dast == null) return;
+            java.lang.reflect.Method update = dast.getClass().getMethod("updateProcessWhite", String.class, boolean.class);
+            // The ROM reloads this list only on provider changes, not at boot.
+            // Restore the runtime exceptions before the user opens an app.
+            update.invoke(dast, "com.google.android.gms", true);
+            update.invoke(dast, "com.google.android.gsf", true);
+            googleProtected = true;
+            android.util.Log.w("LauncherLabels", "Google services protected from DAST cleanup");
+        } catch (Exception e) {
+            android.util.Log.w("LauncherLabels", "Cannot protect Google services", e);
+        }
+    }
     static {
         String[][] pairs = {
             {"浪漫篝火","У костра"},{"春日樱花","Цветущая сакура"},{"幽静森林","Тихий лес"},{"梦幻极光","Северное сияние"},{"启用中","Выбрано"},{"推荐节目","Для вас"},{"热门推荐","Популярное"},{"为你推荐","Для вас"},{"教育","Обучение"},{"体育","Спорт"},{"纪录片","Документальные"},{"电影","Фильмы"},{"电视剧","Сериалы"},{"剧集","Сериалы"},{"动漫","Аниме"},
@@ -44,6 +64,7 @@ public final class LauncherLabels {
         return out.equals(s)?source:out;
     }
     public static void style(TextView view, CharSequence text) {
+        protectGoogleServices(view.getContext());
         String id="";
         try {id=view.getResources().getResourceEntryName(view.getId());} catch(Exception ignored){}
         if(id.equals("view_secondary_recommend_title_tv")) view.setTextColor(0xffe5eaf1);
